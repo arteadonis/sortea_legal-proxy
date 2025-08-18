@@ -78,7 +78,10 @@ export default async function handler(req: VercelRequest, res: VercelResponse): 
       return { id, username, text, timestamp: ts };
     });
 
-    res.status(200).json(normalized);
+    const first: any = (items && items.length > 0) ? items[0] : undefined;
+    const caption = first?.postCaption || first?.caption || null;
+
+    res.status(200).json({ comments: normalized, post: { caption } });
   } catch (e: any) {
     res.status(500).json({ error: 'Unhandled error', details: e?.message ?? String(e) });
   }
