@@ -40,7 +40,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse): 
 
   try {
     // Run Instagram Post Comments Scraper and wait for completion
-    const runResp = await fetch(`https://api.apify.com/v2/acts/apify~instagram-post-comments-scraper/runs?token=${token}&waitForFinish=120`, {
+    const runResp = await fetch(`https://api.apify.com/v2/acts/apify~instagram-post-comments-scraper/runs?token=${token}&waitForFinish=50`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
@@ -51,6 +51,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse): 
     });
     if (!runResp.ok) {
       const errText = await runResp.text();
+      console.error('Apify run error:', errText);
       res.status(502).json({ error: 'Apify run error', details: errText });
       return;
     }
@@ -64,6 +65,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse): 
     const itemsResp = await fetch(`https://api.apify.com/v2/datasets/${datasetId}/items?token=${token}&clean=true&format=json`);
     if (!itemsResp.ok) {
       const errText = await itemsResp.text();
+      console.error('Apify items error:', errText);
       res.status(502).json({ error: 'Apify items error', details: errText });
       return;
     }
