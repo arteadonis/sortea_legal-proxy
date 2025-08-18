@@ -33,19 +33,29 @@ export default async function handler(req: VercelRequest, res: VercelResponse): 
   }
 
   const token = process.env.APIFY_TOKEN;
+  const actor = (process.env.APIFY_ACTOR || '').trim();
+  const taskId = (process.env.APIFY_TASK_ID || '').trim();
   if (!token) {
     res.status(500).json({ error: 'APIFY_TOKEN is not configured' });
+    return;
+  }
+  if (!actor && !taskId) {
+    res.status(500).json({ error: 'APIFY_ACTOR or APIFY_TASK_ID is required' });
     return;
   }
 
   try {
     // Run Instagram Post Comments Scraper and wait for completion
-    const runResp = await fetch(`https://api.apify.com/v2/acts/apify~instagram-post-comments-scraper/runs?token=${token}&waitForFinish=50`, {
+    const runUrl = taskId
+      ? `https://api.apify.com/v2/actor-tasks/${encodeURIComponent(taskId)}/runs?token=${token}&waitForFinish=50`
+      : `https://api.apify.com/v2/acts/${encodeURIComponent(actor)}/runs?token=${token}&waitForFinish=50`;
+    const runResp = await fetch(runUrl, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         directUrls: [postUrl],
-        resultsLimit: 500,
+        postUrls: [postUrl],
+        resultsLimit: 300,
         proxy: { useApifyProxy: true },
       }),
     });
