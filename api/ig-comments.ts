@@ -1,3 +1,5 @@
+// Local declaration to avoid IDE type errors without @types/node
+declare const process: any;
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 
 function cors(res: VercelResponse): void {
@@ -29,6 +31,27 @@ export default async function handler(req: VercelRequest, res: VercelResponse): 
   const postUrl = String(req.query.url || '').trim();
   if (!postUrl) {
     res.status(400).json({ error: 'Missing url parameter' });
+    return;
+  }
+
+  // Mock mode for development: skip Apify calls and return fake data
+  const mockParam = String(req.query.mock || '').trim();
+  const mockEnv = String(process.env.MOCK_IG || '').trim().toLowerCase();
+  const useMock = mockParam === '1' || mockParam.toLowerCase() === 'true' || mockEnv === '1' || mockEnv === 'true';
+  if (useMock) {
+    const now = new Date().toISOString();
+    const comments = Array.from({ length: 20 }).map((_, i) => ({
+      id: `${i + 1}`,
+      username: `mock_user_${i + 1}`,
+      text: i % 3 === 0
+        ? 'I want to win! @friend1 @friend2 #giveaway'
+        : i % 3 === 1
+          ? 'Participando! Gracias por el sorteo'
+          : 'Me encanta este premio!!!',
+      timestamp: now,
+    }));
+    const caption = 'SORTEO! 🎁 Para participar: 1) Seguir nuestra cuenta 2) Dar like 3) Comentar mencionando 2 amigos. Sorteo válido hasta el 30/09. #giveaway';
+    res.status(200).json({ comments, post: { caption } });
     return;
   }
 
