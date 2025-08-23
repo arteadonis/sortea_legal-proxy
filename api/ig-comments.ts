@@ -51,7 +51,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse): 
       timestamp: now,
     }));
     const caption = 'SORTEO! 🎁 Para participar: 1) Seguir nuestra cuenta 2) Dar like 3) Comentar mencionando 2 amigos. Sorteo válido hasta el 30/09. #giveaway';
-    res.status(200).json({ comments, post: { caption } });
+    const imageUrl = 'https://placehold.co/600x600?text=Instagram+Post';
+    res.status(200).json({ comments, post: { caption, imageUrl } });
     return;
   }
 
@@ -115,8 +116,9 @@ export default async function handler(req: VercelRequest, res: VercelResponse): 
 
     const first: any = (items && items.length > 0) ? items[0] : undefined;
     const caption = first?.postCaption || first?.caption || null;
+    const imageUrl = first?.imageUrl || first?.displayUrl || first?.display_url || first?.thumbnailUrl || first?.thumbnail_url || null;
 
-    res.status(200).json({ comments: normalized, post: { caption } });
+    res.status(200).json({ comments: normalized, post: { caption, imageUrl } });
   } catch (e: any) {
     res.status(500).json({ error: 'Unhandled error', details: e?.message ?? String(e) });
   }
