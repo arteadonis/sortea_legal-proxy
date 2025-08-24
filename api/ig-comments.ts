@@ -107,29 +107,41 @@ export default async function handler(req: VercelRequest, res: VercelResponse): 
       res.status(502).json({ error: 'Apify items error', details: errText });
       return;
     }
-    const items: IgItem[] = (await itemsResp.json()) as IgItem[];
-
-    const normalized = items.map((it) => {
-      const username = it.ownerUsername || '';
-      const text = it.text || '';
-      const id = String(it.id || `${username}-${Math.random().toString(36).slice(2)}`);
-      const tsRaw = (it.timestamp ?? it.takenAt ?? it.createdAt ?? new Date().toISOString());
-      const ts = typeof tsRaw === 'number' ? new Date(tsRaw * 1000).toISOString() : String(tsRaw);
-      const anyIt = it as any;
-      const avatarUrl = anyIt.ownerProfilePicUrl
-        || anyIt.ownerProfilePicURL
-        || anyIt.ownerProfilePicture
-        || anyIt.profilePicUrl
-        || anyIt.profile_picture_url
-        || null;
-      return { id, username, text, timestamp: ts, avatarUrl };
-    });
-
+    const items: any[] = (await itemsResp.json()) as any[];
     const first: any = (items && items.length > 0) ? items[0] : undefined;
     const caption = first?.postCaption || first?.caption || null;
     const imageUrl = first?.imageUrl || first?.displayUrl || first?.display_url || first?.thumbnailUrl || first?.thumbnail_url || null;
+    const postOwnerUsername: string | null = first?.ownerUsername || null;
+    const postOwnerAvatar: string | null = first?.ownerProfilePicUrl
+      || first?.owner?.profile_pic_url
+      || (Array.isArray(first?.latestComments)
+          ? (first.latestComments.find((c: any) => c?.ownerUsername === postOwnerUsername)?.ownerProfilePicUrl
+            || first.latestComments.find((c: any) => c?.owner?.username === postOwnerUsername)?.owner?.profile_pic_url)
+          : null)
+      || null;
 
-    res.status(200).json({ comments: normalized, post: { caption, imageUrl } });
+    const outComments: Array<{ id: string; username: string; text: string; timestamp: string; avatarUrl: string | null; }> = [];
+    const pushComment = (node: any): void => {
+      const id = String(node?.id || '');
+      const username = String(node?.ownerUsername || node?.owner?.username || '');
+      const text = String(node?.text || '');
+      const tsRaw: any = node?.timestamp || node?.takenAt || node?.createdAt || new Date().toISOString();
+      const timestamp = typeof tsRaw === 'number' ? new Date(tsRaw * 1000).toISOString() : String(tsRaw);
+      const avatarUrl: string | null = node?.ownerProfilePicUrl || node?.owner?.profile_pic_url || null;
+      if (!id || !username) return;
+      outComments.push({ id, username, text, timestamp, avatarUrl });
+    };
+
+    if (Array.isArray(first?.latestComments)) {
+      for (const c of first.latestComments as any[]) {
+        pushComment(c);
+        if (Array.isArray(c?.replies)) {
+          for (const r of c.replies as any[]) pushComment(r);
+        }
+      }
+    }
+
+    res.status(200).json({ comments: outComments, post: { caption, imageUrl, ownerUsername: postOwnerUsername, ownerAvatarUrl: postOwnerAvatar } });
   } catch (e: any) {
     res.status(500).json({ error: 'Unhandled error', details: e?.message ?? String(e) });
   }
