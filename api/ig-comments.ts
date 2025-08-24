@@ -40,16 +40,20 @@ export default async function handler(req: VercelRequest, res: VercelResponse): 
   const useMock = mockParam === '1' || mockParam.toLowerCase() === 'true' || mockEnv === '1' || mockEnv === 'true';
   if (useMock) {
     const now = new Date().toISOString();
-    const comments = Array.from({ length: 20 }).map((_, i) => ({
-      id: `${i + 1}`,
-      username: `mock_user_${i + 1}`,
-      text: i % 3 === 0
-        ? 'I want to win! @friend1 @friend2 #giveaway'
-        : i % 3 === 1
-          ? 'Participando! Gracias por el sorteo'
-          : 'Me encanta este premio!!!',
-      timestamp: now,
-    }));
+    const comments = Array.from({ length: 20 }).map((_, i) => {
+      const username = `mock_user_${i + 1}`;
+      return {
+        id: `${i + 1}`,
+        username,
+        text: i % 3 === 0
+          ? 'I want to win! @friend1 @friend2 #giveaway'
+          : i % 3 === 1
+            ? 'Participando! Gracias por el sorteo'
+            : 'Me encanta este premio!!!',
+        timestamp: now,
+        avatarUrl: `https://unavatar.io/instagram/${username}?size=256`,
+      };
+    });
     const caption = 'SORTEO! 🎁 Para participar: 1) Seguir nuestra cuenta 2) Dar like 3) Comentar mencionando 2 amigos. Sorteo válido hasta el 30/09. #giveaway';
     const imageUrl = 'https://placehold.co/600x600?text=Instagram+Post';
     res.status(200).json({ comments, post: { caption, imageUrl } });
@@ -111,7 +115,14 @@ export default async function handler(req: VercelRequest, res: VercelResponse): 
       const id = String(it.id || `${username}-${Math.random().toString(36).slice(2)}`);
       const tsRaw = (it.timestamp ?? it.takenAt ?? it.createdAt ?? new Date().toISOString());
       const ts = typeof tsRaw === 'number' ? new Date(tsRaw * 1000).toISOString() : String(tsRaw);
-      return { id, username, text, timestamp: ts };
+      const anyIt = it as any;
+      const avatarUrl = anyIt.ownerProfilePicUrl
+        || anyIt.ownerProfilePicURL
+        || anyIt.ownerProfilePicture
+        || anyIt.profilePicUrl
+        || anyIt.profile_picture_url
+        || null;
+      return { id, username, text, timestamp: ts, avatarUrl };
     });
 
     const first: any = (items && items.length > 0) ? items[0] : undefined;
