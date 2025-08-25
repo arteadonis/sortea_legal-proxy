@@ -4,9 +4,14 @@
   "private": true,
   "scripts": {
     "dev": "vercel dev",
+    "build": "tsc",
     "deploy": "vercel --prod"
   },
   "dependencies": {
     "@vercel/node": "^3.2.20"
+  },
+  "devDependencies": {
+    "@types/node": "^24.3.0",
+    "typescript": "^5.9.2"
   }
 }
