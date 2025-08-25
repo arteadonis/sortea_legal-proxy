@@ -43,7 +43,7 @@ Incluye secciones típicas (Organizador, Vigencia, Participación, Premios, Sele
 Usa tono claro, estructurado en markdown.
 
 Datos:
-- Título del sorteo: ${title}
+- Título: ${title}
 - Premio: ${prize}
 - Requisitos de participación: ${requirements}
 - Vigencia: desde ${startDate} hasta ${endDate}
@@ -81,7 +81,7 @@ Devuelve solo markdown del cuerpo, sin explicaciones adicionales.
         return;
       }
       const data: any = await completionResp.json();
-      md = data?.choices?.[0]?.message?.content ?? '# Términos y Condiciones\n\n(No se recibió contenido)';
+      md = data?.choices?.[0]?.message?.content ?? '# Términos y Condiciones 2\n\n(No se recibió contenido)';
     } else if (provider === 'gemini') {
       if (!geminiKey) {
         res.status(500).json({ error: 'GEMINI_API_KEY is not configured' });
