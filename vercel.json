@@ -1,1 +1,8 @@
-{}
+{
+  "functions": {
+    "api/*.ts": {
+      "runtime": "nodejs20.x"
+    }
+  },
+  "buildCommand": "echo 'No build needed for serverless functions'"
+}
