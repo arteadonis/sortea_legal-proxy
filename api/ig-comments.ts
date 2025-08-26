@@ -110,7 +110,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse): 
         caption: '¿Antojos de un dulcito?, @treat.uy \n¿Ganas de un helado?, @treat.uy \n¿Quieres un smoothie?, @treat.uy \n¿Gluten free?, @treat.uy \n¿Productos naturales?, @treat.uy \n\n¡Sencillo! Dale like, comenta y menciona un amigo para participar de un sorteo. El premio es un Helado gratis en cualquiera de nuestros locales 🤤😍',
         imageUrl: 'https://scontent-fra3-1.cdninstagram.com/v/t51.2885-15/500813412_18505438774020783_8450944611229719887_n.jpg?stp=dst-jpg_e35_p1080x1080_sh0.08_tt6&_nc_ht=scontent-fra3-1.cdninstagram.com&_nc_cat=103&_nc_oc=Q6cZ2QGj6tnQLIxUk6Jb_tMI5vc9tLj9Q9Gi0im-nPV7QKIV0NQTnrcmQZ7DLj-MgZE1OFU&_nc_ohc=IEP2gRKiPR0Q7kNvwH--OFC&_nc_gid=qAaO48-WC5LJDCoGZOoTRA&edm=APs17CUBAAAA&ccb=7-5&oh=00_AfVCkuAq5fy4EtRg_YQHAKR1lfjF1hQzf70c-6Gei3mjag&oe=68B2C90E&_nc_sid=10d13b',
         ownerUsername: 'soymariab',
-        ownerAvatarUrl: 'https://scontent-fra3-1.cdninstagram.com/v/t51.2885-19/523508772_18516684802020783_772942058957348881_n.jpg?stp=dst-jpg_s150x150_tt6&efg=eyJ2ZW5jb2RlX3RhZyI6InByb2ZpbGVfcGljLmRqYW5nby4xMDgwLmMyIn0&_nc_ht=scontent-fra3-1.cdninstagram.com&_nc_cat=103&_nc_oc=Q6cZ2QGj6tnQLIxUk6Jb_tMI5vc9tLj9Q9Gi0im-nPV7QKIV0NQTnrcmQZ7DLj-MgZE1OFU&_nc_ohc=ljrJxMQxKcoQ7kNvwGCJiFg&_nc_gid=qAaO48-WC5LJDCoGZOoTRA&edm=APs17CUBAAAA&ccb=7-5&oh=00_AfVhdEH4JQqMwC2kEvJTd280uPf8skxojzYE0c6cOzRnbw&oe=68B2BCA0&_nc_sid=10d13b'
+        ownerAvatarUrl: 'https://scontent-fra3-1.cdninstagram.com/v/t51.2885-19/523508772_18516684802020783_772942058957348881_n.jpg?stp=dst-jpg_s150x150_tt6&efg=eyJ2ZW5jb2RlX3RhZyI6InByb2ZpbGVfcGljLmRqYW5nby4xMDgwLmMyIn0&_nc_ht=scontent-fra3-1.cdninstagram.com&_nc_cat=103&_nc_oc=Q6cZ2QGj6tnQLIxUk6Jb_tMI5vc9tLj9Q9Gi0im-nPV7QKIV0NQTnrcmQZ7DLj-MgZE1OFU&_nc_ohc=ljrJxMQxKcoQ7kNvwGCJiFg&_nc_gid=qAaO48-WC5LJDCoGZOoTRA&edm=APs17CUBAAAA&ccb=7-5&oh=00_AfVhdEH4JQqMwC2kEvJTd280uPf8skxojzYE0c6cOzRnbw&oe=68B2BCA0&_nc_sid=10d13b',
+        createdAt: new Date().toISOString()
       }
     };
     res.status(200).json(mock);
@@ -230,7 +231,9 @@ export default async function handler(req: VercelRequest, res: VercelResponse): 
       }
     }
 
-    res.status(200).json({ comments: outComments, post: { caption, imageUrl, ownerUsername: postOwnerUsername, ownerAvatarUrl: postOwnerAvatar } });
+    const createdAtRaw: string | null = pickFirstString(first?.timestamp, first?.takenAt, first?.createdAt);
+    const createdAt: string = normalizeTimestamp(createdAtRaw);
+    res.status(200).json({ comments: outComments, post: { caption, imageUrl, ownerUsername: postOwnerUsername, ownerAvatarUrl: postOwnerAvatar, createdAt } });
   } catch (e: any) {
     res.status(500).json({ error: 'Unhandled error', details: e?.message ?? String(e) });
   }
