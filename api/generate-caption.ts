@@ -34,8 +34,28 @@ export default async function handler(req: VercelRequest, res: VercelResponse): 
   const geminiKey: string | undefined = process.env.GEMINI_API_KEY;
   const deepseekKey: string | undefined = process.env.DEEPSEEK_API_KEY;
 
+  console.log('[generate-caption] Provider:', provider);
+  console.log('[generate-caption] OpenAI key configured:', !!openaiKey);
+  console.log('[generate-caption] Gemini key configured:', !!geminiKey);
+  console.log('[generate-caption] DeepSeek key configured:', !!deepseekKey);
+
+  // Check if the required API key is configured
+  if (provider === 'openai' && !openaiKey) {
+    res.status(500).json({ error: 'OPENAI_API_KEY not configured in Vercel environment' });
+    return;
+  }
+  if (provider === 'gemini' && !geminiKey) {
+    res.status(500).json({ error: 'GEMINI_API_KEY not configured in Vercel environment' });
+    return;
+  }
+  if (provider === 'deepseek' && !deepseekKey) {
+    res.status(500).json({ error: 'DEEPSEEK_API_KEY not configured in Vercel environment' });
+    return;
+  }
+
   try {
     const body: CaptionRequest = typeof req.body === 'string' ? JSON.parse(req.body) : req.body;
+    console.log('[generate-caption] Request body:', JSON.stringify(body));
     const { type, tone, language, postUsername, winners = [], alternates = [], prizeName } = body;
 
     if (!type || !tone || !language) {
@@ -111,6 +131,7 @@ Devuelve SOLO el caption, sin explicaciones.
         res.status(500).json({ error: 'OPENAI_API_KEY is not configured' });
         return;
       }
+      console.log('[generate-caption] Calling OpenAI API...');
       const completionResp = await fetch('https://api.openai.com/v1/chat/completions', {
         method: 'POST',
         headers: {
@@ -127,14 +148,17 @@ Devuelve SOLO el caption, sin explicaciones.
           max_tokens: 200,
         }),
       });
+      console.log('[generate-caption] OpenAI response status:', completionResp.status);
       if (!completionResp.ok) {
         const errText = await completionResp.text();
+        console.log('[generate-caption] OpenAI error:', errText);
         res.status(502).json({ error: 'OpenAI error', details: errText });
         return;
       }
       const data: any = await completionResp.json();
       caption = data?.choices?.[0]?.message?.content?.trim() ?? '';
       tokensUsed = data?.usage?.total_tokens ?? 0;
+      console.log('[generate-caption] OpenAI success, tokens:', tokensUsed);
     } else if (provider === 'gemini') {
       if (!geminiKey) {
         res.status(500).json({ error: 'GEMINI_API_KEY is not configured' });
@@ -196,8 +220,10 @@ Devuelve SOLO el caption, sin explicaciones.
       return;
     }
 
+    console.log('[generate-caption] Success! Caption length:', caption.length);
     res.status(200).json({ caption, tokensUsed });
   } catch (e: any) {
+    console.error('[generate-caption] Unhandled error:', e);
     res.status(500).json({ error: 'Unhandled error', details: e?.message ?? String(e) });
   }
 }
