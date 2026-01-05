@@ -123,6 +123,9 @@ Devuelve SOLO el caption, sin explicaciones.
 `;
     }
 
+    console.log('[generate-caption] Prompt built, length:', prompt.length);
+    console.log('[generate-caption] Using provider:', provider);
+
     let caption: string = '';
     let tokensUsed: number = 0;
 
@@ -166,6 +169,8 @@ Devuelve SOLO el caption, sin explicaciones.
       }
       const model = process.env.GEMINI_MODEL || 'gemini-1.5-flash';
       const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${geminiKey}`;
+      console.log('[generate-caption] Calling Gemini API, model:', model);
+      console.log('[generate-caption] Prompt length:', prompt.length);
       const gemResp = await fetch(url, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -174,8 +179,10 @@ Devuelve SOLO el caption, sin explicaciones.
           generationConfig: { temperature: 0.7, maxOutputTokens: 200 },
         }),
       });
+      console.log('[generate-caption] Gemini response status:', gemResp.status);
       if (!gemResp.ok) {
         const errText = await gemResp.text();
+        console.log('[generate-caption] Gemini error:', errText);
         res.status(502).json({ error: 'Gemini error', details: errText });
         return;
       }
@@ -185,6 +192,7 @@ Devuelve SOLO el caption, sin explicaciones.
         .filter((t: string) => t);
       caption = parts.join('\n\n').trim();
       tokensUsed = data?.usageMetadata?.totalTokenCount ?? 0;
+      console.log('[generate-caption] Gemini success, tokens:', tokensUsed);
     } else if (provider === 'deepseek') {
       if (!deepseekKey) {
         res.status(500).json({ error: 'DEEPSEEK_API_KEY is not configured' });
