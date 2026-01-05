@@ -167,7 +167,7 @@ Devuelve SOLO el caption, sin explicaciones.
         res.status(500).json({ error: 'GEMINI_API_KEY is not configured' });
         return;
       }
-      const model = process.env.GEMINI_MODEL || 'gemini-2.0-flash';
+      const model = process.env.GEMINI_MODEL || 'gemini-2.0-flash-lite';
       const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${geminiKey}`;
       console.log('[generate-caption] Calling Gemini API, model:', model);
       console.log('[generate-caption] Prompt length:', prompt.length);
