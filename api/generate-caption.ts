@@ -1,4 +1,5 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
+import { callAI, configFromEnv } from './_lib/ai-provider';
 
 function cors(res: VercelResponse): void {
   res.setHeader('Access-Control-Allow-Origin', '*');
@@ -29,29 +30,11 @@ export default async function handler(req: VercelRequest, res: VercelResponse): 
     return;
   }
 
-  const provider = (process.env.AI_PROVIDER || 'openai').toLowerCase();
-  const openaiKey: string | undefined = process.env.OPENAI_API_KEY;
-  const geminiKey: string | undefined = process.env.GEMINI_API_KEY;
-  const deepseekKey: string | undefined = process.env.DEEPSEEK_API_KEY;
-
-  console.log('[generate-caption] Provider:', provider);
-  console.log('[generate-caption] OpenAI key configured:', !!openaiKey);
-  console.log('[generate-caption] Gemini key configured:', !!geminiKey);
-  console.log('[generate-caption] DeepSeek key configured:', !!deepseekKey);
-
-  // Check if the required API key is configured
-  if (provider === 'openai' && !openaiKey) {
-    res.status(500).json({ error: 'OPENAI_API_KEY not configured in Vercel environment' });
-    return;
-  }
-  if (provider === 'gemini' && !geminiKey) {
-    res.status(500).json({ error: 'GEMINI_API_KEY not configured in Vercel environment' });
-    return;
-  }
-  if (provider === 'deepseek' && !deepseekKey) {
-    res.status(500).json({ error: 'DEEPSEEK_API_KEY not configured in Vercel environment' });
-    return;
-  }
+  const config = configFromEnv();
+  console.log('[generate-caption] Preferred provider:', config.preferredProvider);
+  console.log('[generate-caption] OpenAI key configured:', !!config.openaiKey);
+  console.log('[generate-caption] Gemini key configured:', !!config.geminiKey);
+  console.log('[generate-caption] DeepSeek key configured:', !!config.deepseekKey);
 
   try {
     const body: CaptionRequest = typeof req.body === 'string' ? JSON.parse(req.body) : req.body;
@@ -124,112 +107,16 @@ Devuelve SOLO el caption, sin explicaciones.
     }
 
     console.log('[generate-caption] Prompt built, length:', prompt.length);
-    console.log('[generate-caption] Using provider:', provider);
 
-    let caption: string = '';
-    let tokensUsed: number = 0;
+    const result = await callAI(config, {
+      systemPrompt: 'Eres un experto en marketing de redes sociales que crea captions atractivos y concisos.',
+      userPrompt: prompt,
+      temperature: 0.7,
+      maxTokens: 200,
+    });
 
-    if (provider === 'openai') {
-      if (!openaiKey) {
-        res.status(500).json({ error: 'OPENAI_API_KEY is not configured' });
-        return;
-      }
-      console.log('[generate-caption] Calling OpenAI API...');
-      const completionResp = await fetch('https://api.openai.com/v1/chat/completions', {
-        method: 'POST',
-        headers: {
-          Authorization: `Bearer ${openaiKey}`,
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          model: 'gpt-4o-mini',
-          messages: [
-            { role: 'system', content: 'Eres un experto en marketing de redes sociales que crea captions atractivos y concisos.' },
-            { role: 'user', content: prompt },
-          ],
-          temperature: 0.7,
-          max_tokens: 200,
-        }),
-      });
-      console.log('[generate-caption] OpenAI response status:', completionResp.status);
-      if (!completionResp.ok) {
-        const errText = await completionResp.text();
-        console.log('[generate-caption] OpenAI error:', errText);
-        res.status(502).json({ error: 'OpenAI error', details: errText });
-        return;
-      }
-      const data: any = await completionResp.json();
-      caption = data?.choices?.[0]?.message?.content?.trim() ?? '';
-      tokensUsed = data?.usage?.total_tokens ?? 0;
-      console.log('[generate-caption] OpenAI success, tokens:', tokensUsed);
-    } else if (provider === 'gemini') {
-      if (!geminiKey) {
-        res.status(500).json({ error: 'GEMINI_API_KEY is not configured' });
-        return;
-      }
-      const model = (process.env.AI_PROVIDER || 'openai').toLowerCase();
-      const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${geminiKey}`;
-      console.log('[generate-caption] Calling Gemini API, model:', model);
-      console.log('[generate-caption] Prompt length:', prompt.length);
-      const gemResp = await fetch(url, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          contents: [{ role: 'user', parts: [{ text: prompt }] }],
-          generationConfig: { temperature: 0.7, maxOutputTokens: 200 },
-        }),
-      });
-      console.log('[generate-caption] Gemini response status:', gemResp.status);
-      if (!gemResp.ok) {
-        const errText = await gemResp.text();
-        console.log('[generate-caption] Gemini error:', errText);
-        res.status(502).json({ error: 'Gemini error', details: errText });
-        return;
-      }
-      const data: any = await gemResp.json();
-      const parts: string[] = (data?.candidates?.[0]?.content?.parts || [])
-        .map((p: any) => p?.text || '')
-        .filter((t: string) => t);
-      caption = parts.join('\n\n').trim();
-      tokensUsed = data?.usageMetadata?.totalTokenCount ?? 0;
-      console.log('[generate-caption] Gemini success, tokens:', tokensUsed);
-    } else if (provider === 'deepseek') {
-      if (!deepseekKey) {
-        res.status(500).json({ error: 'DEEPSEEK_API_KEY is not configured' });
-        return;
-      }
-      const model = process.env.DEEPSEEK_MODEL || 'deepseek-chat';
-      const dsResp = await fetch('https://api.deepseek.com/chat/completions', {
-        method: 'POST',
-        headers: {
-          Authorization: `Bearer ${deepseekKey}`,
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          model,
-          messages: [
-            { role: 'system', content: 'Eres un experto en marketing de redes sociales que crea captions atractivos y concisos.' },
-            { role: 'user', content: prompt },
-          ],
-          temperature: 0.7,
-          max_tokens: 200,
-        }),
-      });
-      if (!dsResp.ok) {
-        const errText = await dsResp.text();
-        res.status(502).json({ error: 'DeepSeek error', details: errText });
-        return;
-      }
-      const data: any = await dsResp.json();
-      caption = data?.choices?.[0]?.message?.content?.trim() ?? '';
-      tokensUsed = data?.usage?.total_tokens ?? 0;
-    } else {
-      res.status(400).json({ error: 'Unsupported AI_PROVIDER', provider });
-      return;
-    }
-
-    console.log('[generate-caption] Success! Caption length:', caption.length);
-    res.status(200).json({ caption, tokensUsed });
+    console.log('[generate-caption] Success! Provider used:', result.provider, 'Caption length:', result.content.length);
+    res.status(200).json({ caption: result.content, tokensUsed: result.tokensUsed, provider: result.provider });
   } catch (e: any) {
     console.error('[generate-caption] Unhandled error:', e);
     res.status(500).json({ error: 'Unhandled error', details: e?.message ?? String(e) });
