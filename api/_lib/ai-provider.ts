@@ -138,15 +138,19 @@ const PROVIDERS: Record<string, ProviderFn> = {
  * Order: preferred provider first, then others with configured keys.
  */
 export async function callAI(config: AIConfig, request: AIRequest): Promise<AIResponse> {
-  const preferred = (config.preferredProvider || 'openai').toLowerCase();
-  const availableProviders: string[] = [];
-  if (config.openaiKey) availableProviders.push('openai');
-  if (config.geminiKey) availableProviders.push('gemini');
-  if (config.deepseekKey) availableProviders.push('deepseek');
+  const preferred = (config.preferredProvider || 'deepseek').toLowerCase();
+  // Order by cost: deepseek (cheapest) → gemini (free tier) → openai (most expensive)
+  const costOrder = ['gemini', 'deepseek', 'openai'];
+  const availableProviders: string[] = costOrder.filter((p) => {
+    if (p === 'gemini') return !!config.geminiKey;
+    if (p === 'deepseek') return !!config.deepseekKey;
+    if (p === 'openai') return !!config.openaiKey;
+    return false;
+  });
   if (availableProviders.length === 0) {
     throw new Error('No AI provider configured. Set at least one API key.');
   }
-  // Put preferred first, then others
+  // Put preferred first, then others in cost order
   const orderedProviders = [
     preferred,
     ...availableProviders.filter((p) => p !== preferred),
@@ -173,8 +177,8 @@ export async function callAI(config: AIConfig, request: AIRequest): Promise<AIRe
  */
 export function configFromEnv(): AIConfig {
   return {
-    openaiKey: process.env.OPENAI_API_KEY,
     geminiKey: process.env.GEMINI_API_KEY,
+    openaiKey: process.env.OPENAI_API_KEY,
     deepseekKey: process.env.DEEPSEEK_API_KEY,
     preferredProvider: process.env.AI_PROVIDER || 'openai',
     geminiModel: process.env.GEMINI_MODEL,

@@ -47,9 +47,9 @@ export default async function handler(req: VercelRequest, res: VercelResponse): 
     }
 
     const toneDescriptions: Record<string, string> = {
-      excited: 'entusiasta, con emojis celebratorios y tono alegre',
+      excited: 'entusiasta, con emojis celebratorios y tono muy alegre',
       professional: 'profesional, formal y conciso',
-      fun: 'divertido, casual y amigable con emojis creativos',
+      fun: 'muy divertido, casual y amigable con emojis creativos',
     };
 
     const languageNames: Record<string, string> = {
