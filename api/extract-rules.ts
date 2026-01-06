@@ -7,6 +7,11 @@ function cors(res: VercelResponse): void {
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
 }
 
+interface Prize {
+  position: number;
+  description: string;
+}
+
 interface AiRulesResponse {
   winnersCount?: number | null;
   mentionsRequired?: number | null;
@@ -15,6 +20,7 @@ interface AiRulesResponse {
   mustFollow?: boolean;
   hashtags?: string[];
   deadline?: string | null;
+  prizes?: Prize[];
 }
 
 function extractFirstJson(text: string): string | null {
@@ -55,8 +61,18 @@ Extrae, a partir del siguiente caption, los requisitos del sorteo. Responde SOLO
   "mustLike": boolean,                 // si se pide dar like
   "mustFollow": boolean,               // si se pide seguir la cuenta
   "hashtags": string[],                // hasta 10 hashtags detectados
-  "deadline": string|null              // fecha límite en ISO-8601 si se menciona, si no null
+  "deadline": string|null,             // fecha límite en ISO-8601 si se menciona, si no null
+  "prizes": [                          // lista de premios detectados, ordenados por posición
+    { "position": 1, "description": "descripción del 1er premio" },
+    { "position": 2, "description": "descripción del 2do premio" }
+  ]                                    // array vacío si no se mencionan premios específicos
 }
+
+Notas para extraer premios:
+- Si solo hay un premio mencionado, usar position: 1
+- Si hay múltiples premios (1er, 2do, 3er lugar), extraerlos en orden
+- Mantener la descripción concisa pero informativa
+- Si el premio es dinero, incluir el monto y moneda si se menciona
 
 Caption:
 """
@@ -85,6 +101,14 @@ ${caption}
       return;
     }
 
+    const parsedPrizes: Prize[] = Array.isArray(parsed?.prizes)
+      ? (parsed.prizes as Prize[])
+          .filter((p: Prize) => typeof p?.position === 'number' && typeof p?.description === 'string')
+          .map((p: Prize) => ({ position: p.position, description: p.description }))
+          .sort((a: Prize, b: Prize) => a.position - b.position)
+          .slice(0, 10)
+      : [];
+
     const out: AiRulesResponse = {
       winnersCount: parsed?.winnersCount ?? null,
       mentionsRequired: parsed?.mentionsRequired ?? null,
@@ -93,6 +117,7 @@ ${caption}
       mustFollow: Boolean(parsed?.mustFollow),
       hashtags: Array.isArray(parsed?.hashtags) ? (parsed?.hashtags as string[]).slice(0, 10) : [],
       deadline: typeof parsed?.deadline === 'string' && parsed?.deadline ? parsed?.deadline as string : null,
+      prizes: parsedPrizes,
     };
 
     console.log('[extract-rules] Success! Extracted rules:', JSON.stringify(out));
