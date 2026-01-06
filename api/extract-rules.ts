@@ -1,6 +1,5 @@
-// Local declaration to avoid IDE type errors without @types/node
-declare const process: any;
 import type { VercelRequest, VercelResponse } from '@vercel/node';
+import { callAI, configFromEnv } from './_lib/ai-provider';
 
 function cors(res: VercelResponse): void {
   res.setHeader('Access-Control-Allow-Origin', '*');
@@ -36,11 +35,6 @@ export default async function handler(req: VercelRequest, res: VercelResponse): 
     return;
   }
 
-  const provider = (process.env.AI_PROVIDER || 'openai').toLowerCase();
-  const openaiKey: string | undefined = process.env.OPENAI_API_KEY;
-  const geminiKey: string | undefined = process.env.GEMINI_API_KEY;
-  const deepseekKey: string | undefined = process.env.DEEPSEEK_API_KEY;
-
   try {
     const body: any = typeof req.body === 'string' ? JSON.parse(req.body) : req.body;
     const caption: string = String(body?.caption || '').trim();
@@ -48,6 +42,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse): 
       res.status(400).json({ error: 'Missing caption' });
       return;
     }
+
+    console.log('[extract-rules] Processing caption, length:', caption.length);
 
     const systemPrompt = 'Eres un asistente que extrae requisitos de participación de un sorteo en Instagram. Devuelve SOLO JSON válido.';
     const userPrompt = `
@@ -67,96 +63,16 @@ Caption:
 ${caption}
 """`;
 
-    let contentText = '';
+    const config = configFromEnv();
+    const aiResponse = await callAI(config, {
+      systemPrompt,
+      userPrompt,
+      temperature: 0.2,
+    });
 
-    if (provider === 'openai') {
-      if (!openaiKey) {
-        res.status(500).json({ error: 'OPENAI_API_KEY is not configured' });
-        return;
-      }
-      const completionResp = await fetch('https://api.openai.com/v1/chat/completions', {
-        method: 'POST',
-        headers: {
-          Authorization: `Bearer ${openaiKey}`,
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          model: 'gpt-4o-mini',
-          messages: [
-            { role: 'system', content: systemPrompt },
-            { role: 'user', content: userPrompt },
-          ],
-          temperature: 0.2,
-        }),
-      });
-      if (!completionResp.ok) {
-        const errText = await completionResp.text();
-        res.status(502).json({ error: 'OpenAI error', details: errText });
-        return;
-      }
-      const data: any = await completionResp.json();
-      contentText = data?.choices?.[0]?.message?.content ?? '';
-    } else if (provider === 'gemini') {
-      if (!geminiKey) {
-        res.status(500).json({ error: 'GEMINI_API_KEY is not configured' });
-        return;
-      }
-      const model = process.env.GEMINI_MODEL || 'gemini-1.5-flash';
-      const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${geminiKey}`;
-      const gemResp = await fetch(url, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          contents: [
-            { role: 'user', parts: [{ text: `${systemPrompt}\n\n${userPrompt}` }] },
-          ],
-          generationConfig: { temperature: 0.2 },
-        }),
-      });
-      if (!gemResp.ok) {
-        const errText = await gemResp.text();
-        res.status(502).json({ error: 'Gemini error', details: errText });
-        return;
-      }
-      const data: any = await gemResp.json();
-      const parts: string[] = (data?.candidates?.[0]?.content?.parts || [])
-        .map((p: any) => p?.text || '')
-        .filter((t: string) => t);
-      contentText = parts.join('\n');
-    } else if (provider === 'deepseek') {
-      if (!deepseekKey) {
-        res.status(500).json({ error: 'DEEPSEEK_API_KEY is not configured' });
-        return;
-      }
-      const model = process.env.DEEPSEEK_MODEL || 'deepseek-chat';
-      const dsResp = await fetch('https://api.deepseek.com/chat/completions', {
-        method: 'POST',
-        headers: {
-          Authorization: `Bearer ${deepseekKey}`,
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          model,
-          messages: [
-            { role: 'system', content: systemPrompt },
-            { role: 'user', content: userPrompt },
-          ],
-          temperature: 0.2,
-        }),
-      });
-      if (!dsResp.ok) {
-        const errText = await dsResp.text();
-        res.status(502).json({ error: 'DeepSeek error', details: errText });
-        return;
-      }
-      const data: any = await dsResp.json();
-      contentText = data?.choices?.[0]?.message?.content ?? '';
-    } else {
-      res.status(400).json({ error: 'Unsupported AI_PROVIDER', provider });
-      return;
-    }
+    console.log('[extract-rules] AI response from provider:', aiResponse.provider);
 
-    let jsonText = contentText.trim();
+    let jsonText = aiResponse.content.trim();
     const embedded = extractFirstJson(jsonText);
     if (embedded) jsonText = embedded;
 
@@ -164,7 +80,8 @@ ${caption}
     try {
       parsed = JSON.parse(jsonText) as AiRulesResponse;
     } catch (_) {
-      res.status(502).json({ error: 'AI returned non-JSON content', content: contentText });
+      console.log('[extract-rules] Failed to parse JSON:', jsonText);
+      res.status(502).json({ error: 'AI returned non-JSON content', content: aiResponse.content });
       return;
     }
 
@@ -178,8 +95,10 @@ ${caption}
       deadline: typeof parsed?.deadline === 'string' && parsed?.deadline ? parsed?.deadline as string : null,
     };
 
+    console.log('[extract-rules] Success! Extracted rules:', JSON.stringify(out));
     res.status(200).json(out);
   } catch (e: any) {
-    res.status(500).json({ error: 'Unhandled error', details: e?.message ?? String(e) });
+    console.error('[extract-rules] Error:', e?.message ?? String(e));
+    res.status(500).json({ error: 'AI processing failed', details: e?.message ?? String(e) });
   }
 }
