@@ -36,20 +36,13 @@ interface AppNotification {
 const NOTIFICATIONS: AppNotification[] = [
   // Example notification - uncomment to activate:
   {
-    id: 'welcome-v1',
-    type: 'info',
-    title: '¡Bienvenido a RaffleCat!',
-    message: 'Gracias por usar nuestra app. Si tienes sugerencias, ¡nos encantaría escucharte!',
-    priority: 1,
-  },
-  {
-    id: 'promo-2024',
+    id: 'promo-2026',
     type: 'promo',
     title: '🎉 Nueva función disponible',
     message: 'Ahora puedes generar captions con IA para anunciar tus ganadores.',
-    startDate: '2024-01-01T00:00:00Z',
-    endDate: '2024-12-31T23:59:59Z',
-    priority: 2,
+    startDate: '2025-01-01T00:00:00Z',
+    endDate: '2026-12-31T23:59:59Z',
+    priority: 1,
   },
 ];
 
