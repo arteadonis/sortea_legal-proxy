@@ -39,11 +39,12 @@ function normalizeTimestamp(ts: unknown): string {
 }
 
 /**
- * Build a public fallback avatar URL for Instagram users.
+ * Return null for avatar - let the client handle fallback to initial letter.
+ * Instagram CDN URLs are preferred when available from Apify data.
  */
-function buildUnavatarUrl(username: string | null | undefined): string | null {
-  if (!username) return null;
-  return `https://unavatar.io/instagram/${encodeURIComponent(username)}?size=256`;
+function buildFallbackAvatarUrl(username: string | null | undefined): string | null {
+  // No fallback URL - client will show initial letter instead
+  return null;
 }
 
 export default async function handler(req: VercelRequest, res: VercelResponse): Promise<void> {
@@ -185,7 +186,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse): 
         ownerComment?.owner?.profilePicUrl
       );
     }
-    if (!postOwnerAvatar) postOwnerAvatar = buildUnavatarUrl(postOwnerUsername);
+    if (!postOwnerAvatar) postOwnerAvatar = buildFallbackAvatarUrl(postOwnerUsername);
 
     const outComments: Array<{ id: string; username: string; text: string; timestamp: string; avatarUrl: string | null; }> = [];
     const pushComment = (node: any): void => {
@@ -202,7 +203,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse): 
         node?.profilePicUrl,
         node?.profile_pic_url
       );
-      if (!avatarUrl) avatarUrl = buildUnavatarUrl(username);
+      if (!avatarUrl) avatarUrl = buildFallbackAvatarUrl(username);
       if (!id || !username) return;
       outComments.push({ id, username, text, timestamp, avatarUrl });
     };
