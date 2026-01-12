@@ -17,6 +17,7 @@ interface CaptionRequest {
   winners?: string[];
   alternates?: string[];
   prizeName?: string;
+  rules?: string[];
 }
 
 export default async function handler(req: VercelRequest, res: VercelResponse): Promise<void> {
@@ -39,7 +40,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse): 
   try {
     const body: CaptionRequest = typeof req.body === 'string' ? JSON.parse(req.body) : req.body;
     console.log('[generate-caption] Request body:', JSON.stringify(body));
-    const { type, tone, language, postUsername, winners = [], alternates = [], prizeName } = body;
+    const { type, tone, language, postUsername, winners = [], alternates = [], prizeName, rules = [] } = body;
 
     if (!type || !tone || !language) {
       res.status(400).json({ error: 'Missing required fields: type, tone, language' });
@@ -86,20 +87,23 @@ Requisitos:
 Devuelve SOLO el caption, sin explicaciones.
 `;
     } else {
+      const rulesText = rules.length > 0
+        ? `\nReglas para participar:\n${rules.map((r, i) => `${i + 1}. ${r}`).join('\n')}`
+        : '';
+      
       prompt = `
 Genera un caption de Instagram para anunciar un nuevo sorteo.
 
 Datos:
 - Organizador: ${postUsername ? `@${postUsername}` : 'no especificado'}
-- Premio: ${prizeName || 'no especificado'}
+- Premio: ${prizeName || 'no especificado'}${rulesText}
 
 Requisitos:
 - Idioma: ${languageNames[language] || language}
 - Tono: ${toneDescriptions[tone] || tone}
-- Generar entusiasmo para participar
-- Mencionar que revisen las bases en la publicación
+- Generar entusiasmo para participar${rules.length > 0 ? '\n- Incluir las reglas de participación de forma clara y atractiva' : '\n- Mencionar que revisen las bases en la publicación'}
 - Usar emojis apropiados al tono
-- Máximo 280 caracteres
+- Máximo 400 caracteres${rules.length > 0 ? ' (puede ser más largo si hay varias reglas)' : ''}
 - No usar hashtags
 
 Devuelve SOLO el caption, sin explicaciones.
