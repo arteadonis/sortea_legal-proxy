@@ -17,12 +17,13 @@ const OAUTH_BASE = 'https://www.facebook.com/v21.0/dialog/oauth';
  * - instagram_basic: IG profile, media listing
  * - instagram_manage_comments: read comments on owned media (no read-only alternative)
  * - pages_show_list: discover Pages to resolve IG Business Account
- * NOTE: pages_read_engagement removed — not needed for IG-specific endpoints.
+ * - pages_read_engagement: required to read Page-linked IG Business Account details
  */
 const SCOPES: string[] = [
   'instagram_basic',
   'instagram_manage_comments',
   'pages_show_list',
+  'pages_read_engagement',
 ];
 
 function cors(res: VercelResponse): void {
