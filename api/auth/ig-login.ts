@@ -13,12 +13,16 @@ import type { VercelRequest, VercelResponse } from '@vercel/node';
 
 const OAUTH_BASE = 'https://www.facebook.com/v21.0/dialog/oauth';
 
-/** Permissions needed to read comments on the user's own IG posts. */
+/** Permissions needed to read comments on the user's own IG posts.
+ * - instagram_basic: IG profile, media listing
+ * - instagram_manage_comments: read comments on owned media (no read-only alternative)
+ * - pages_show_list: discover Pages to resolve IG Business Account
+ * NOTE: pages_read_engagement removed — not needed for IG-specific endpoints.
+ */
 const SCOPES: string[] = [
   'instagram_basic',
   'instagram_manage_comments',
   'pages_show_list',
-  'pages_read_engagement',
 ];
 
 function cors(res: VercelResponse): void {
