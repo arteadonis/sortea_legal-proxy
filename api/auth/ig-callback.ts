@@ -92,6 +92,7 @@ async function getLongLivedToken(shortToken: string): Promise<LongLivedTokenResp
 
 /**
  * Get Facebook Pages the user manages and find the linked IG Business Account.
+ * Handles pagination to ensure all pages are checked.
  */
 async function resolveInstagramAccount(accessToken: string): Promise<{
   igUserId: string;
@@ -101,20 +102,39 @@ async function resolveInstagramAccount(accessToken: string): Promise<{
   igUsername: string;
   igProfilePicUrl: string | null;
 }> {
-  const pagesUrl = `${GRAPH_BASE}/me/accounts?fields=id,name,access_token,instagram_business_account&access_token=${accessToken}`;
-  const pagesResp = await fetch(pagesUrl);
-  if (!pagesResp.ok) {
-    const errText: string = await pagesResp.text();
-    throw new Error(`Pages fetch failed (${pagesResp.status}): ${errText}`);
+  // Fetch all pages with pagination
+  const allPages: PageData[] = [];
+  let nextUrl: string | null =
+    `${GRAPH_BASE}/me/accounts?fields=id,name,access_token,instagram_business_account&limit=100&access_token=${accessToken}`;
+  while (nextUrl) {
+    const pagesResp = await fetch(nextUrl);
+    if (!pagesResp.ok) {
+      const errText: string = await pagesResp.text();
+      throw new Error(`Pages fetch failed (${pagesResp.status}): ${errText}`);
+    }
+    const body = (await pagesResp.json()) as PagesResponse & { paging?: { next?: string } };
+    allPages.push(...body.data);
+    nextUrl = body.paging?.next || null;
   }
-  const pagesData = (await pagesResp.json()) as PagesResponse;
-  const pageWithIg: PageData | undefined = pagesData.data.find(
+  console.log(`[ig-callback] Found ${allPages.length} Facebook Page(s):`);
+  for (const p of allPages) {
+    console.log(
+      `  - Page "${p.name}" (${p.id}) → ig_business_account: ${
+        p.instagram_business_account?.id ?? 'NONE'
+      }`
+    );
+  }
+  const pageWithIg: PageData | undefined = allPages.find(
     (p: PageData) => p.instagram_business_account?.id
   );
   if (!pageWithIg || !pageWithIg.instagram_business_account) {
+    const hint: string = allPages.length === 0
+      ? 'No Facebook Pages found. Make sure the user granted pages_show_list and pages_read_engagement permissions.'
+      : `Found ${allPages.length} Page(s) but none have an IG Business/Creator account linked.`;
     throw new Error(
-      'NO_IG_BUSINESS_ACCOUNT: No Instagram Business/Creator account found linked to any Facebook Page. ' +
-      'The user must convert their IG account to Business or Creator and link it to a Facebook Page.'
+      `NO_IG_BUSINESS_ACCOUNT: ${hint} ` +
+      'The user must: 1) Have an IG Business or Creator account, 2) Link it to a Facebook Page, ' +
+      '3) Re-authorize the app with all required permissions.'
     );
   }
   const igUserId: string = pageWithIg.instagram_business_account.id;
