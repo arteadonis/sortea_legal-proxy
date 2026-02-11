@@ -102,18 +102,40 @@ async function resolveInstagramAccount(accessToken: string): Promise<{
   igUsername: string;
   igProfilePicUrl: string | null;
 }> {
+  // DEBUG: Check granted permissions in detail
+  try {
+    const permUrl = `${GRAPH_BASE}/me/permissions?access_token=${accessToken}`;
+    console.log('[ig-callback][DEBUG] Fetching permissions from:', permUrl.replace(accessToken, 'TOKEN_REDACTED'));
+    const permResp = await fetch(permUrl);
+    const permRaw: string = await permResp.text();
+    console.log('[ig-callback][DEBUG] Permissions raw response:', permRaw);
+  } catch (permErr) {
+    console.error('[ig-callback][DEBUG] Failed to fetch permissions:', permErr);
+  }
+  // DEBUG: Check user identity
+  try {
+    const meUrl = `${GRAPH_BASE}/me?fields=id,name,email&access_token=${accessToken}`;
+    const meResp = await fetch(meUrl);
+    const meRaw: string = await meResp.text();
+    console.log('[ig-callback][DEBUG] /me identity:', meRaw);
+  } catch (meErr) {
+    console.error('[ig-callback][DEBUG] Failed to fetch /me:', meErr);
+  }
   // Fetch all pages with pagination
   const allPages: PageData[] = [];
-  let nextUrl: string | null =
-    `${GRAPH_BASE}/me/accounts?fields=id,name,access_token,instagram_business_account&limit=100&access_token=${accessToken}`;
+  const pagesUrl = `${GRAPH_BASE}/me/accounts?fields=id,name,access_token,instagram_business_account&limit=100&access_token=${accessToken}`;
+  console.log('[ig-callback][DEBUG] Fetching pages from:', pagesUrl.replace(accessToken, 'TOKEN_REDACTED'));
+  let nextUrl: string | null = pagesUrl;
   while (nextUrl) {
     const pagesResp = await fetch(nextUrl);
+    const pagesRaw: string = await pagesResp.text();
+    console.log('[ig-callback][DEBUG] /me/accounts raw response (status', pagesResp.status, '):', pagesRaw);
     if (!pagesResp.ok) {
-      const errText: string = await pagesResp.text();
-      throw new Error(`Pages fetch failed (${pagesResp.status}): ${errText}`);
+      throw new Error(`Pages fetch failed (${pagesResp.status}): ${pagesRaw}`);
     }
-    const body = (await pagesResp.json()) as PagesResponse & { paging?: { next?: string } };
-    allPages.push(...body.data);
+    const body = JSON.parse(pagesRaw) as PagesResponse & { paging?: { next?: string } };
+    console.log('[ig-callback][DEBUG] Parsed pages data array length:', body.data?.length ?? 'undefined');
+    allPages.push(...(body.data || []));
     nextUrl = body.paging?.next || null;
   }
   console.log(`[ig-callback] Found ${allPages.length} Facebook Page(s):`);
@@ -123,6 +145,28 @@ async function resolveInstagramAccount(accessToken: string): Promise<{
         p.instagram_business_account?.id ?? 'NONE'
       }`
     );
+  }
+  // DEBUG: If no pages found, try alternative query via /me?fields=accounts
+  if (allPages.length === 0) {
+    console.log('[ig-callback][DEBUG] No pages via /me/accounts. Trying alternative: /me?fields=accounts{id,name,instagram_business_account}');
+    try {
+      const altUrl = `${GRAPH_BASE}/me?fields=accounts{id,name,access_token,instagram_business_account}&access_token=${accessToken}`;
+      const altResp = await fetch(altUrl);
+      const altRaw: string = await altResp.text();
+      console.log('[ig-callback][DEBUG] Alternative /me?fields=accounts response (status', altResp.status, '):', altRaw);
+    } catch (altErr) {
+      console.error('[ig-callback][DEBUG] Alternative query failed:', altErr);
+    }
+    // DEBUG: Also try querying pages directly if we know any page IDs
+    console.log('[ig-callback][DEBUG] Trying /me?fields=id,name,accounts.limit(100){id,name,instagram_business_account,tasks}');
+    try {
+      const alt2Url = `${GRAPH_BASE}/me?fields=id,name,accounts.limit(100){id,name,instagram_business_account,tasks}&access_token=${accessToken}`;
+      const alt2Resp = await fetch(alt2Url);
+      const alt2Raw: string = await alt2Resp.text();
+      console.log('[ig-callback][DEBUG] Alternative v2 response (status', alt2Resp.status, '):', alt2Raw);
+    } catch (alt2Err) {
+      console.error('[ig-callback][DEBUG] Alternative v2 query failed:', alt2Err);
+    }
   }
   const pageWithIg: PageData | undefined = allPages.find(
     (p: PageData) => p.instagram_business_account?.id
@@ -190,18 +234,6 @@ export default async function handler(req: VercelRequest, res: VercelResponse): 
     const longToken: LongLivedTokenResponse = await getLongLivedToken(shortToken.access_token);
     console.log('[ig-callback] Got long-lived token (expires in', longToken.expires_in, 's)');
     console.log('[ig-callback] Resolving Instagram Business Account...');
-
-    // Debug: Check granted permissions
-    try {
-      const permResp = await fetch(`${GRAPH_BASE}/me/permissions?access_token=${longToken.access_token}`);
-      if (permResp.ok) {
-        const permData = await permResp.json();
-        console.log('[ig-callback] Granted permissions:', JSON.stringify(permData));
-      }
-    } catch (err) {
-      console.warn('[ig-callback] Failed to check permissions:', err);
-    }
-
     const igAccount = await resolveInstagramAccount(longToken.access_token);
     console.log('[ig-callback] Resolved IG account:', igAccount.igUsername, 'ID:', igAccount.igUserId);
     // Calculate expiration date
