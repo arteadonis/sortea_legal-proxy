@@ -18,12 +18,17 @@ const OAUTH_BASE = 'https://www.facebook.com/v21.0/dialog/oauth';
  * - instagram_manage_comments: Read comments (mandatory, no read-only scope exists).
  * - pages_show_list: List Facebook Pages to discover the linked IG Business Account.
  * - pages_read_engagement: Read Page metadata required to resolve the IG link and content.
+ * - business_management: Access pages owned by a Business Manager via /me/businesses.
+ *
+ * NOTE: When META_CONFIG_ID is set, Facebook Login for Business is used instead of
+ * manual scopes. This is the recommended flow for apps accessing Business Manager assets.
  */
 const SCOPES: string[] = [
   'instagram_basic',
   'instagram_manage_comments',
   'pages_show_list',
   'pages_read_engagement',
+  'business_management',
 ];
 
 function cors(res: VercelResponse): void {
@@ -49,14 +54,33 @@ export default async function handler(req: VercelRequest, res: VercelResponse): 
     return;
   }
   const state: string = String(req.query.state || '').trim();
-  const scope: string = SCOPES.join(',');
-  const oauthUrl =
-    `${OAUTH_BASE}` +
-    `?client_id=${appId}` +
-    `&redirect_uri=${encodeURIComponent(redirectUri)}` +
-    `&scope=${encodeURIComponent(scope)}` +
-    `&response_type=code` +
-    (state ? `&state=${encodeURIComponent(state)}` : '');
+  const configId: string = process.env.META_CONFIG_ID || '';
+  let oauthUrl: string;
+  if (configId) {
+    // Facebook Login for Business: uses config_id which defines permissions and
+    // properly handles pages/IG accounts inside a Business Manager portfolio.
+    oauthUrl =
+      `${OAUTH_BASE}` +
+      `?client_id=${appId}` +
+      `&redirect_uri=${encodeURIComponent(redirectUri)}` +
+      `&config_id=${configId}` +
+      `&response_type=code` +
+      `&override_default_response_type=true` +
+      (state ? `&state=${encodeURIComponent(state)}` : '');
+    console.log('[ig-login] Using Facebook Login for Business (config_id)...');
+  } else {
+    // Classic Facebook Login: uses scope parameter.
+    const scope: string = SCOPES.join(',');
+    oauthUrl =
+      `${OAUTH_BASE}` +
+      `?client_id=${appId}` +
+      `&redirect_uri=${encodeURIComponent(redirectUri)}` +
+      `&scope=${encodeURIComponent(scope)}` +
+      `&response_type=code` +
+      `&auth_type=rerequest` +
+      (state ? `&state=${encodeURIComponent(state)}` : '');
+    console.log('[ig-login] Using classic Facebook Login (scope)...');
+  }
   console.log('[ig-login] Redirecting to Facebook OAuth...');
   res.redirect(302, oauthUrl);
 }

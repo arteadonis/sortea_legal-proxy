@@ -43,6 +43,60 @@ interface IgUserResponse {
   name?: string;
 }
 
+interface BusinessData {
+  id: string;
+  name: string;
+}
+
+interface BusinessesResponse {
+  data: BusinessData[];
+  paging?: { next?: string };
+}
+
+/**
+ * Fallback: resolve pages through Business Manager API.
+ * When pages are owned by a Business Portfolio, /me/accounts returns empty.
+ * This queries /me/businesses → /{biz}/owned_pages to find them.
+ */
+async function resolvePagesThroughBusinessManager(accessToken: string): Promise<PageData[]> {
+  console.log('[ig-callback][BM-fallback] Querying /me/businesses...');
+  const bizResp = await fetch(
+    `${GRAPH_BASE}/me/businesses?fields=id,name&access_token=${accessToken}`
+  );
+  const bizRaw: string = await bizResp.text();
+  console.log('[ig-callback][BM-fallback] /me/businesses response (status', bizResp.status, '):', bizRaw);
+  if (!bizResp.ok) {
+    console.warn('[ig-callback][BM-fallback] Cannot access /me/businesses. business_management permission may be required.');
+    return [];
+  }
+  const bizBody = JSON.parse(bizRaw) as BusinessesResponse;
+  if (!bizBody.data || bizBody.data.length === 0) {
+    console.log('[ig-callback][BM-fallback] No businesses found.');
+    return [];
+  }
+  const allPages: PageData[] = [];
+  for (const biz of bizBody.data) {
+    console.log(`[ig-callback][BM-fallback] Querying owned_pages for business "${biz.name}" (${biz.id})...`);
+    try {
+      const pagesResp = await fetch(
+        `${GRAPH_BASE}/${biz.id}/owned_pages?fields=id,name,access_token,instagram_business_account&limit=100&access_token=${accessToken}`
+      );
+      const pagesRaw: string = await pagesResp.text();
+      console.log('[ig-callback][BM-fallback] owned_pages response (status', pagesResp.status, '):', pagesRaw);
+      if (pagesResp.ok) {
+        const pagesBody = JSON.parse(pagesRaw) as PagesResponse;
+        if (pagesBody.data) {
+          allPages.push(...pagesBody.data);
+        }
+      }
+    } catch (err) {
+      console.error(`[ig-callback][BM-fallback] Error fetching owned_pages for ${biz.id}:`, err);
+    }
+  }
+  console.log(`[ig-callback][BM-fallback] Found ${allPages.length} page(s) through Business Manager.`);
+  return allPages;
+}
+
 function cors(res: VercelResponse): void {
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', 'GET, OPTIONS');
@@ -102,43 +156,21 @@ async function resolveInstagramAccount(accessToken: string): Promise<{
   igUsername: string;
   igProfilePicUrl: string | null;
 }> {
-  // DEBUG: Check granted permissions in detail
-  try {
-    const permUrl = `${GRAPH_BASE}/me/permissions?access_token=${accessToken}`;
-    console.log('[ig-callback][DEBUG] Fetching permissions from:', permUrl.replace(accessToken, 'TOKEN_REDACTED'));
-    const permResp = await fetch(permUrl);
-    const permRaw: string = await permResp.text();
-    console.log('[ig-callback][DEBUG] Permissions raw response:', permRaw);
-  } catch (permErr) {
-    console.error('[ig-callback][DEBUG] Failed to fetch permissions:', permErr);
-  }
-  // DEBUG: Check user identity
-  try {
-    const meUrl = `${GRAPH_BASE}/me?fields=id,name,email&access_token=${accessToken}`;
-    const meResp = await fetch(meUrl);
-    const meRaw: string = await meResp.text();
-    console.log('[ig-callback][DEBUG] /me identity:', meRaw);
-  } catch (meErr) {
-    console.error('[ig-callback][DEBUG] Failed to fetch /me:', meErr);
-  }
-  // Fetch all pages with pagination
+  // Step 1: Try standard /me/accounts endpoint
   const allPages: PageData[] = [];
-  const pagesUrl = `${GRAPH_BASE}/me/accounts?fields=id,name,access_token,instagram_business_account&limit=100&access_token=${accessToken}`;
-  console.log('[ig-callback][DEBUG] Fetching pages from:', pagesUrl.replace(accessToken, 'TOKEN_REDACTED'));
-  let nextUrl: string | null = pagesUrl;
+  let nextUrl: string | null =
+    `${GRAPH_BASE}/me/accounts?fields=id,name,access_token,instagram_business_account&limit=100&access_token=${accessToken}`;
   while (nextUrl) {
     const pagesResp = await fetch(nextUrl);
-    const pagesRaw: string = await pagesResp.text();
-    console.log('[ig-callback][DEBUG] /me/accounts raw response (status', pagesResp.status, '):', pagesRaw);
     if (!pagesResp.ok) {
-      throw new Error(`Pages fetch failed (${pagesResp.status}): ${pagesRaw}`);
+      const errText: string = await pagesResp.text();
+      throw new Error(`Pages fetch failed (${pagesResp.status}): ${errText}`);
     }
-    const body = JSON.parse(pagesRaw) as PagesResponse & { paging?: { next?: string } };
-    console.log('[ig-callback][DEBUG] Parsed pages data array length:', body.data?.length ?? 'undefined');
+    const body = (await pagesResp.json()) as PagesResponse & { paging?: { next?: string } };
     allPages.push(...(body.data || []));
     nextUrl = body.paging?.next || null;
   }
-  console.log(`[ig-callback] Found ${allPages.length} Facebook Page(s):`);
+  console.log(`[ig-callback] /me/accounts returned ${allPages.length} page(s).`);
   for (const p of allPages) {
     console.log(
       `  - Page "${p.name}" (${p.id}) → ig_business_account: ${
@@ -146,27 +178,12 @@ async function resolveInstagramAccount(accessToken: string): Promise<{
       }`
     );
   }
-  // DEBUG: If no pages found, try alternative query via /me?fields=accounts
+  // Step 2: If /me/accounts is empty, try Business Manager fallback.
+  // Pages owned by a Business Portfolio do not appear in /me/accounts.
   if (allPages.length === 0) {
-    console.log('[ig-callback][DEBUG] No pages via /me/accounts. Trying alternative: /me?fields=accounts{id,name,instagram_business_account}');
-    try {
-      const altUrl = `${GRAPH_BASE}/me?fields=accounts{id,name,access_token,instagram_business_account}&access_token=${accessToken}`;
-      const altResp = await fetch(altUrl);
-      const altRaw: string = await altResp.text();
-      console.log('[ig-callback][DEBUG] Alternative /me?fields=accounts response (status', altResp.status, '):', altRaw);
-    } catch (altErr) {
-      console.error('[ig-callback][DEBUG] Alternative query failed:', altErr);
-    }
-    // DEBUG: Also try querying pages directly if we know any page IDs
-    console.log('[ig-callback][DEBUG] Trying /me?fields=id,name,accounts.limit(100){id,name,instagram_business_account,tasks}');
-    try {
-      const alt2Url = `${GRAPH_BASE}/me?fields=id,name,accounts.limit(100){id,name,instagram_business_account,tasks}&access_token=${accessToken}`;
-      const alt2Resp = await fetch(alt2Url);
-      const alt2Raw: string = await alt2Resp.text();
-      console.log('[ig-callback][DEBUG] Alternative v2 response (status', alt2Resp.status, '):', alt2Raw);
-    } catch (alt2Err) {
-      console.error('[ig-callback][DEBUG] Alternative v2 query failed:', alt2Err);
-    }
+    console.log('[ig-callback] No pages via /me/accounts. Trying Business Manager fallback...');
+    const bmPages: PageData[] = await resolvePagesThroughBusinessManager(accessToken);
+    allPages.push(...bmPages);
   }
   const pageWithIg: PageData | undefined = allPages.find(
     (p: PageData) => p.instagram_business_account?.id
