@@ -129,12 +129,11 @@ async function resolveInstagramAccount(accessToken: string): Promise<{
   );
   if (!pageWithIg || !pageWithIg.instagram_business_account) {
     const hint: string = allPages.length === 0
-      ? 'No Facebook Pages found. Make sure the user granted pages_show_list and pages_read_engagement permissions.'
+      ? 'No Facebook Pages found. This usually happens if: 1) The user did not select any Page during the Facebook Login flow (Permissions dialog), or 2) The user does not have an Admin/Editor role on the Page, or 3) The Page is in a Business Manager and not assigned to the user.'
       : `Found ${allPages.length} Page(s) but none have an IG Business/Creator account linked.`;
     throw new Error(
       `NO_IG_BUSINESS_ACCOUNT: ${hint} ` +
-      'The user must: 1) Have an IG Business or Creator account, 2) Link it to a Facebook Page, ' +
-      '3) Re-authorize the app with all required permissions.'
+      'Please go to Facebook Settings > Business Integrations, remove the app, and try again making sure to SELECT ALL PAGES.'
     );
   }
   const igUserId: string = pageWithIg.instagram_business_account.id;
@@ -191,6 +190,18 @@ export default async function handler(req: VercelRequest, res: VercelResponse): 
     const longToken: LongLivedTokenResponse = await getLongLivedToken(shortToken.access_token);
     console.log('[ig-callback] Got long-lived token (expires in', longToken.expires_in, 's)');
     console.log('[ig-callback] Resolving Instagram Business Account...');
+
+    // Debug: Check granted permissions
+    try {
+      const permResp = await fetch(`${GRAPH_BASE}/me/permissions?access_token=${longToken.access_token}`);
+      if (permResp.ok) {
+        const permData = await permResp.json();
+        console.log('[ig-callback] Granted permissions:', JSON.stringify(permData));
+      }
+    } catch (err) {
+      console.warn('[ig-callback] Failed to check permissions:', err);
+    }
+
     const igAccount = await resolveInstagramAccount(longToken.access_token);
     console.log('[ig-callback] Resolved IG account:', igAccount.igUsername, 'ID:', igAccount.igUserId);
     // Calculate expiration date
