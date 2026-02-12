@@ -249,13 +249,15 @@ export default async function handler(req: VercelRequest, res: VercelResponse): 
     const shortToken: TokenResponse = await exchangeCodeForToken(code);
     console.log('[ig-callback] Got short-lived token, exchanging for long-lived...');
     const longToken: LongLivedTokenResponse = await getLongLivedToken(shortToken.access_token);
-    console.log('[ig-callback] Got long-lived token (expires in', longToken.expires_in, 's)');
+    const DEFAULT_EXPIRY_SECONDS = 5184000; // 60 days
+    const expiresInSeconds: number = longToken.expires_in ?? DEFAULT_EXPIRY_SECONDS;
+    console.log('[ig-callback] Got long-lived token (expires in', expiresInSeconds, 's)');
     console.log('[ig-callback] Resolving Instagram Business Account...');
     const igAccount = await resolveInstagramAccount(longToken.access_token);
     console.log('[ig-callback] Resolved IG account:', igAccount.igUsername, 'ID:', igAccount.igUserId);
     // Calculate expiration date
     const expiresAt: string = new Date(
-      Date.now() + longToken.expires_in * 1000
+      Date.now() + expiresInSeconds * 1000
     ).toISOString();
     // Build session payload
     const session = {

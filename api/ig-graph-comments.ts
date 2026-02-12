@@ -156,6 +156,10 @@ async function fetchAllComments({
     }
     const data = (await resp.json()) as GraphCommentPage;
     for (const comment of data.data) {
+      // NOTE: avatarUrl is null because the Instagram Graph API does not expose
+      // commenter profile pictures. The /{media}/comments endpoint only returns
+      // id, text, timestamp, and username. There is no way to fetch profile
+      // pictures for arbitrary commenters via the Graph API.
       allComments.push({
         id: comment.id,
         username: comment.username || '',
@@ -163,7 +167,6 @@ async function fetchAllComments({
         timestamp: comment.timestamp || new Date().toISOString(),
         avatarUrl: null,
       });
-      // Include replies as flat comments
       if (comment.replies?.data) {
         for (const reply of comment.replies.data) {
           allComments.push({
