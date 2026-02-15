@@ -21,6 +21,7 @@ interface AiRulesResponse {
   hashtags?: string[];
   deadline?: string | null;
   prizes?: Prize[];
+  suggestedTitle?: string | null;
 }
 
 function extractFirstJson(text: string): string | null {
@@ -65,7 +66,8 @@ Extrae, a partir del siguiente caption, los requisitos del sorteo. Responde SOLO
   "prizes": [                          // lista de premios detectados, ordenados por posición
     { "position": 1, "description": "descripción del 1er premio" },
     { "position": 2, "description": "descripción del 2do premio" }
-  ]                                    // array vacío si no se mencionan premios específicos
+  ],                                   // array vacío si no se mencionan premios específicos
+  "suggestedTitle": string|null        // título corto (máx 40 chars) que identifique el sorteo, ej: "Sorteo iPhone 15", "Giveaway $500 Gift Card"
 }
 
 Notas para extraer premios:
@@ -109,6 +111,8 @@ ${caption}
           .slice(0, 10)
       : [];
 
+    const rawTitle = typeof parsed?.suggestedTitle === 'string' ? parsed.suggestedTitle.trim().slice(0, 50) : null;
+
     const out: AiRulesResponse = {
       winnersCount: parsed?.winnersCount ?? null,
       mentionsRequired: parsed?.mentionsRequired ?? null,
@@ -118,6 +122,7 @@ ${caption}
       hashtags: Array.isArray(parsed?.hashtags) ? (parsed?.hashtags as string[]).slice(0, 10) : [],
       deadline: typeof parsed?.deadline === 'string' && parsed?.deadline ? parsed?.deadline as string : null,
       prizes: parsedPrizes,
+      suggestedTitle: rawTitle || null,
     };
 
     console.log('[extract-rules] Success! Extracted rules:', JSON.stringify(out));
