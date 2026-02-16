@@ -54,7 +54,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse): 
 
     const systemPrompt = 'Eres un asistente que extrae requisitos de participación de un sorteo en Instagram. Devuelve SOLO JSON válido.';
     const userPrompt = `
-Extrae, a partir del siguiente caption, los requisitos del sorteo. Responde SOLO un JSON con este esquema y sin texto adicional:
+Extrae, a partir del siguiente caption, los requisitos del sorteo y genera un titulo corto que identifique el sorteo (máx 40 chars) que identifique el sorteo. Responde SOLO un JSON con este esquema y sin texto adicional:
 {
   "winnersCount": number|null,         // cantidad de ganadores si se menciona
   "mentionsRequired": number|null,     // cantidad de amigos a etiquetar
