@@ -5,8 +5,9 @@
  * The user sees the Facebook login screen, authorizes, and gets redirected
  * back to /api/auth/ig-callback with the authorization code.
  *
- * Optional query param:
+ * Optional query params:
  *   - state: opaque string passed through the OAuth flow for CSRF protection.
+ *   - auth_type: set to 'reauthenticate' to force re-login (allows account switching).
  */
 declare const process: { env: Record<string, string | undefined> };
 import type { VercelRequest, VercelResponse } from '@vercel/node';
@@ -54,7 +55,10 @@ export default async function handler(req: VercelRequest, res: VercelResponse): 
     return;
   }
   const state: string = String(req.query.state || '').trim();
+  const authType: string = String(req.query.auth_type || '').trim();
   const configId: string = process.env.META_CONFIG_ID || '';
+  // Use 'reauthenticate' to force re-login (account switching), otherwise 'rerequest'.
+  const resolvedAuthType: string = authType === 'reauthenticate' ? 'reauthenticate' : 'rerequest';
   let oauthUrl: string;
   if (configId) {
     // Facebook Login for Business: uses config_id which defines permissions and
@@ -66,8 +70,9 @@ export default async function handler(req: VercelRequest, res: VercelResponse): 
       `&config_id=${configId}` +
       `&response_type=code` +
       `&override_default_response_type=true` +
+      `&auth_type=${resolvedAuthType}` +
       (state ? `&state=${encodeURIComponent(state)}` : '');
-    console.log('[ig-login] Using Facebook Login for Business (config_id)...');
+    console.log(`[ig-login] Using Facebook Login for Business (config_id, auth_type=${resolvedAuthType})...`);
   } else {
     // Classic Facebook Login: uses scope parameter.
     const scope: string = SCOPES.join(',');
@@ -77,9 +82,9 @@ export default async function handler(req: VercelRequest, res: VercelResponse): 
       `&redirect_uri=${encodeURIComponent(redirectUri)}` +
       `&scope=${encodeURIComponent(scope)}` +
       `&response_type=code` +
-      `&auth_type=rerequest` +
+      `&auth_type=${resolvedAuthType}` +
       (state ? `&state=${encodeURIComponent(state)}` : '');
-    console.log('[ig-login] Using classic Facebook Login (scope)...');
+    console.log(`[ig-login] Using classic Facebook Login (scope, auth_type=${resolvedAuthType})...`);
   }
   console.log('[ig-login] Redirecting to Facebook OAuth...');
   res.redirect(302, oauthUrl);

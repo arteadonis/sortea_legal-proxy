@@ -144,18 +144,21 @@ async function getLongLivedToken(shortToken: string): Promise<LongLivedTokenResp
   return data;
 }
 
-/**
- * Get Facebook Pages the user manages and find the linked IG Business Account.
- * Handles pagination to ensure all pages are checked.
- */
-async function resolveInstagramAccount(accessToken: string): Promise<{
+interface IgAccountInfo {
   igUserId: string;
   pageId: string;
   pageName: string;
   pageAccessToken: string;
   igUsername: string;
   igProfilePicUrl: string | null;
-}> {
+}
+
+/**
+ * Get Facebook Pages the user manages and find ALL linked IG Business Accounts.
+ * Handles pagination to ensure all pages are checked.
+ * Returns an array of all IG accounts found (may be empty).
+ */
+async function resolveAllInstagramAccounts(accessToken: string): Promise<IgAccountInfo[]> {
   // Step 1: Try standard /me/accounts endpoint
   const allPages: PageData[] = [];
   let nextUrl: string | null =
@@ -179,16 +182,16 @@ async function resolveInstagramAccount(accessToken: string): Promise<{
     );
   }
   // Step 2: If /me/accounts is empty, try Business Manager fallback.
-  // Pages owned by a Business Portfolio do not appear in /me/accounts.
   if (allPages.length === 0) {
     console.log('[ig-callback] No pages via /me/accounts. Trying Business Manager fallback...');
     const bmPages: PageData[] = await resolvePagesThroughBusinessManager(accessToken);
     allPages.push(...bmPages);
   }
-  const pageWithIg: PageData | undefined = allPages.find(
-    (p: PageData) => p.instagram_business_account?.id
+  // Filter pages that have an IG business account linked
+  const pagesWithIg: PageData[] = allPages.filter(
+    (p: PageData) => !!p.instagram_business_account?.id
   );
-  if (!pageWithIg || !pageWithIg.instagram_business_account) {
+  if (pagesWithIg.length === 0) {
     const hint: string = allPages.length === 0
       ? 'No Facebook Pages found. This usually happens if: 1) The user did not select any Page during the Facebook Login flow (Permissions dialog), or 2) The user does not have an Admin/Editor role on the Page, or 3) The Page is in a Business Manager and not assigned to the user.'
       : `Found ${allPages.length} Page(s) but none have an IG Business/Creator account linked.`;
@@ -197,25 +200,34 @@ async function resolveInstagramAccount(accessToken: string): Promise<{
       'Please go to Facebook Settings > Business Integrations, remove the app, and try again making sure to SELECT ALL PAGES.'
     );
   }
-  const igUserId: string = pageWithIg.instagram_business_account.id;
-  // Fetch IG username and profile picture
-  const igUrl = `${GRAPH_BASE}/${igUserId}?fields=id,username,profile_picture_url,name&access_token=${accessToken}`;
-  const igResp = await fetch(igUrl);
-  let igUsername = '';
-  let igProfilePicUrl: string | null = null;
-  if (igResp.ok) {
-    const igData = (await igResp.json()) as IgUserResponse;
-    igUsername = igData.username || '';
-    igProfilePicUrl = igData.profile_picture_url || null;
+  // Resolve IG profile info for each account
+  const accounts: IgAccountInfo[] = [];
+  for (const page of pagesWithIg) {
+    const igUserId: string = page.instagram_business_account!.id;
+    const igUrl = `${GRAPH_BASE}/${igUserId}?fields=id,username,profile_picture_url,name&access_token=${accessToken}`;
+    let igUsername = '';
+    let igProfilePicUrl: string | null = null;
+    try {
+      const igResp = await fetch(igUrl);
+      if (igResp.ok) {
+        const igData = (await igResp.json()) as IgUserResponse;
+        igUsername = igData.username || '';
+        igProfilePicUrl = igData.profile_picture_url || null;
+      }
+    } catch (e) {
+      console.warn(`[ig-callback] Failed to fetch IG profile for ${igUserId}:`, e);
+    }
+    accounts.push({
+      igUserId,
+      pageId: page.id,
+      pageName: page.name,
+      pageAccessToken: page.access_token,
+      igUsername,
+      igProfilePicUrl,
+    });
   }
-  return {
-    igUserId,
-    pageId: pageWithIg.id,
-    pageName: pageWithIg.name,
-    pageAccessToken: pageWithIg.access_token,
-    igUsername,
-    igProfilePicUrl,
-  };
+  console.log(`[ig-callback] Found ${accounts.length} IG account(s).`);
+  return accounts;
 }
 
 export default async function handler(req: VercelRequest, res: VercelResponse): Promise<void> {
@@ -252,29 +264,49 @@ export default async function handler(req: VercelRequest, res: VercelResponse): 
     const DEFAULT_EXPIRY_SECONDS = 5184000; // 60 days
     const expiresInSeconds: number = longToken.expires_in ?? DEFAULT_EXPIRY_SECONDS;
     console.log('[ig-callback] Got long-lived token (expires in', expiresInSeconds, 's)');
-    console.log('[ig-callback] Resolving Instagram Business Account...');
-    const igAccount = await resolveInstagramAccount(longToken.access_token);
-    console.log('[ig-callback] Resolved IG account:', igAccount.igUsername, 'ID:', igAccount.igUserId);
+    console.log('[ig-callback] Resolving Instagram Business Accounts...');
+    const igAccounts: IgAccountInfo[] = await resolveAllInstagramAccounts(longToken.access_token);
     // Calculate expiration date
     const expiresAt: string = new Date(
       Date.now() + expiresInSeconds * 1000
     ).toISOString();
-    // Build session payload
-    const session = {
-      accessToken: longToken.access_token,
-      igUserId: igAccount.igUserId,
-      igUsername: igAccount.igUsername,
-      igProfilePicUrl: igAccount.igProfilePicUrl,
-      pageId: igAccount.pageId,
-      pageName: igAccount.pageName,
-      expiresAt,
-    };
-    // Redirect back to Flutter app via deep link with session data
     const successUri: string = process.env.META_AUTH_SUCCESS_URI || 'rafflecat://auth/success';
-    const sessionParam: string = encodeURIComponent(JSON.stringify(session));
-    const redirectUrl = `${successUri}?session=${sessionParam}`;
-    console.log('[ig-callback] Redirecting to app...');
-    res.redirect(302, redirectUrl);
+    if (igAccounts.length === 1) {
+      // Single account: send session directly (backward-compatible).
+      const igAccount: IgAccountInfo = igAccounts[0];
+      console.log('[ig-callback] Single IG account:', igAccount.igUsername);
+      const session = {
+        accessToken: longToken.access_token,
+        igUserId: igAccount.igUserId,
+        igUsername: igAccount.igUsername,
+        igProfilePicUrl: igAccount.igProfilePicUrl,
+        pageId: igAccount.pageId,
+        pageName: igAccount.pageName,
+        expiresAt,
+      };
+      const sessionParam: string = encodeURIComponent(JSON.stringify(session));
+      const redirectUrl = `${successUri}?session=${sessionParam}`;
+      console.log('[ig-callback] Redirecting to app (single account)...');
+      res.redirect(302, redirectUrl);
+    } else {
+      // Multiple accounts: send all accounts so the app shows a selector.
+      console.log(`[ig-callback] Multiple IG accounts (${igAccounts.length}), sending for selection...`);
+      const payload = {
+        accessToken: longToken.access_token,
+        expiresAt,
+        accounts: igAccounts.map((a: IgAccountInfo) => ({
+          igUserId: a.igUserId,
+          igUsername: a.igUsername,
+          igProfilePicUrl: a.igProfilePicUrl,
+          pageId: a.pageId,
+          pageName: a.pageName,
+        })),
+      };
+      const accountsParam: string = encodeURIComponent(JSON.stringify(payload));
+      const redirectUrl = `${successUri}?accounts=${accountsParam}`;
+      console.log('[ig-callback] Redirecting to app (multiple accounts)...');
+      res.redirect(302, redirectUrl);
+    }
   } catch (e: unknown) {
     const message: string = e instanceof Error ? e.message : String(e);
     console.error('[ig-callback] Error:', message);
