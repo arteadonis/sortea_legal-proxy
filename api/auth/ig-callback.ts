@@ -264,6 +264,22 @@ export default async function handler(req: VercelRequest, res: VercelResponse): 
     const DEFAULT_EXPIRY_SECONDS = 5184000; // 60 days
     const expiresInSeconds: number = longToken.expires_in ?? DEFAULT_EXPIRY_SECONDS;
     console.log('[ig-callback] Got long-lived token (expires in', expiresInSeconds, 's)');
+    // Extract Facebook User ID for RevenueCat identity linking
+    let fbUserId: string | null = null;
+    try {
+      const fbMeResp = await fetch(
+        `${GRAPH_BASE}/me?fields=id&access_token=${longToken.access_token}`
+      );
+      if (fbMeResp.ok) {
+        const fbMe = (await fbMeResp.json()) as { id: string };
+        fbUserId = fbMe.id;
+        console.log('[ig-callback] FB User ID:', fbUserId);
+      } else {
+        console.warn('[ig-callback] Failed to fetch FB User ID (status', fbMeResp.status, ')');
+      }
+    } catch (e) {
+      console.warn('[ig-callback] Error fetching FB User ID:', e);
+    }
     console.log('[ig-callback] Resolving Instagram Business Accounts...');
     const igAccounts: IgAccountInfo[] = await resolveAllInstagramAccounts(longToken.access_token);
     // Calculate expiration date
@@ -283,6 +299,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse): 
         pageId: igAccount.pageId,
         pageName: igAccount.pageName,
         expiresAt,
+        ...(fbUserId ? { fbUserId } : {}),
       };
       const sessionParam: string = encodeURIComponent(JSON.stringify(session));
       const redirectUrl = `${successUri}?session=${sessionParam}`;
@@ -294,6 +311,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse): 
       const payload = {
         accessToken: longToken.access_token,
         expiresAt,
+        ...(fbUserId ? { fbUserId } : {}),
         accounts: igAccounts.map((a: IgAccountInfo) => ({
           igUserId: a.igUserId,
           igUsername: a.igUsername,
