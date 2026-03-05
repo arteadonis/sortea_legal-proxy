@@ -10,7 +10,8 @@
     "deploy": "vercel --prod"
   },
   "dependencies": {
-    "@vercel/node": "^3.2.20"
+    "@vercel/node": "^3.2.20",
+    "firebase-admin": "^13.7.0"
   },
   "devDependencies": {
     "@types/node": "^24.3.0",
