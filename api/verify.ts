@@ -55,28 +55,30 @@ function cors(res: VercelResponse): void {
 }
 
 export default async function handler(req: VercelRequest, res: VercelResponse): Promise<void> {
+  // CORS must be set before ANY response to avoid browser blocking
   cors(res);
-  if (req.method === 'OPTIONS') {
-    res.status(204).end();
-    return;
-  }
-  if (req.method !== 'GET') {
-    res.status(405).json({ error: 'Method not allowed' });
-    return;
-  }
-
-  const id = typeof req.query.id === 'string' ? req.query.id.trim() : '';
-  if (!id) {
-    res.status(400).json({ error: 'Missing "id" query parameter' });
-    return;
-  }
-  // Basic validation: SHA-256 hex is 64 chars
-  if (!/^[a-f0-9]{64}$/i.test(id)) {
-    res.status(400).json({ error: 'Invalid verification ID format' });
-    return;
-  }
 
   try {
+    if (req.method === 'OPTIONS') {
+      res.status(204).end();
+      return;
+    }
+    if (req.method !== 'GET') {
+      res.status(405).json({ error: 'Method not allowed' });
+      return;
+    }
+
+    const id = typeof req.query.id === 'string' ? req.query.id.trim() : '';
+    if (!id) {
+      res.status(400).json({ error: 'Missing "id" query parameter' });
+      return;
+    }
+    // Basic validation: SHA-256 hex is 64 chars
+    if (!/^[a-f0-9]{64}$/i.test(id)) {
+      res.status(400).json({ error: 'Invalid verification ID format' });
+      return;
+    }
+
     const db = await getFirestore();
     const doc = await db.collection('verifications').doc(id).get();
     if (!doc.exists) {
@@ -104,6 +106,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse): 
   } catch (e: unknown) {
     const message = e instanceof Error ? e.message : 'Unknown error';
     console.error('[verify] Error:', message);
+    // Ensure CORS is still present on error responses
+    cors(res);
     res.status(500).json({ error: 'Internal server error' });
   }
 }
