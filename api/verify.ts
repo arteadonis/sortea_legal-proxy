@@ -36,7 +36,8 @@ async function getFirestore(): Promise<ReturnType<import('firebase-admin').app.A
   if (!admin.default.apps.length) {
     const projectId = process.env.FIREBASE_PROJECT_ID;
     const clientEmail = process.env.FIREBASE_CLIENT_EMAIL;
-    const privateKey = process.env.FIREBASE_PRIVATE_KEY?.replace(/\\n/g, '\n');
+    // Replace literal \n sequences with real newlines (handles all Vercel env formats)
+    const privateKey = (process.env.FIREBASE_PRIVATE_KEY ?? '').split(String.raw`\n`).join('\n');
     if (!projectId || !clientEmail || !privateKey) {
       throw new Error('Missing Firebase service account environment variables');
     }
