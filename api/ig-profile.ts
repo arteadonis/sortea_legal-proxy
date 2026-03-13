@@ -33,9 +33,9 @@ interface ProfileOutput {
 const MAX_USERNAMES = 10;
 
 function cors(res: VercelResponse): void {
-  res.setHeader('Access-Control-Allow-Origin', '*');
+  res.setHeader('Access-Control-Allow-Origin', process.env.ALLOWED_ORIGIN || '*');
   res.setHeader('Access-Control-Allow-Methods', 'GET, OPTIONS');
-  res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization, X-API-Key');
 }
 
 export default async function handler(req: VercelRequest, res: VercelResponse): Promise<void> {
@@ -85,8 +85,6 @@ export default async function handler(req: VercelRequest, res: VercelResponse): 
       ? `https://api.apify.com/v2/actor-tasks/${encodeURIComponent(taskId)}/runs?token=${token}&waitForFinish=30`
       : `https://api.apify.com/v2/acts/${encodeURIComponent(actor)}/runs?token=${token}&waitForFinish=30`;
 
-    console.log(`[ig-profile] Fetching profiles for: ${usernames.join(', ')}`);
-
     const runResp: Response = await fetch(runUrl, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -101,7 +99,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse): 
     if (!runResp.ok) {
       const errText: string = await runResp.text();
       console.error('[ig-profile] Apify run error:', errText);
-      res.status(502).json({ error: 'Apify run error', details: errText });
+      res.status(502).json({ error: 'Upstream service error' });
       return;
     }
 
@@ -121,7 +119,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse): 
     if (!dataResp.ok) {
       const errText: string = await dataResp.text();
       console.error('[ig-profile] Dataset fetch error:', errText);
-      res.status(502).json({ error: 'Dataset fetch error', details: errText });
+      res.status(502).json({ error: 'Upstream service error' });
       return;
     }
 
@@ -145,11 +143,10 @@ export default async function handler(req: VercelRequest, res: VercelResponse): 
       };
     });
 
-    console.log(`[ig-profile] Returned ${profiles.length} profiles`);
     res.status(200).json({ profiles });
   } catch (e: unknown) {
     const message: string = e instanceof Error ? e.message : String(e);
     console.error('[ig-profile] Error:', message);
-    res.status(500).json({ error: 'Unhandled error', details: message });
+    res.status(500).json({ error: 'Internal server error' });
   }
 }

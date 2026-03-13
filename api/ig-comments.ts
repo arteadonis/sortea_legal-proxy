@@ -3,9 +3,9 @@ declare const process: any;
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 
 function cors(res: VercelResponse): void {
-  res.setHeader('Access-Control-Allow-Origin', '*');
+  res.setHeader('Access-Control-Allow-Origin', process.env.ALLOWED_ORIGIN || '*');
   res.setHeader('Access-Control-Allow-Methods', 'GET, OPTIONS');
-  res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization, X-API-Key');
 }
 
 interface IgItem {
@@ -10614,7 +10614,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse): 
     if (!runResp.ok) {
       const errText = await runResp.text();
       console.error('Apify run error:', errText);
-      res.status(502).json({ error: 'Apify run error', details: errText });
+      res.status(502).json({ error: 'Upstream service error' });
       return;
     }
     const runData: any = await runResp.json();
@@ -10628,7 +10628,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse): 
     if (!itemsResp.ok) {
       const errText = await itemsResp.text();
       console.error('Apify items error:', errText);
-      res.status(502).json({ error: 'Apify items error', details: errText });
+      res.status(502).json({ error: 'Upstream service error' });
       return;
     }
     const items: any[] = (await itemsResp.json()) as any[];
@@ -10701,6 +10701,6 @@ export default async function handler(req: VercelRequest, res: VercelResponse): 
     const createdAt: string = normalizeTimestamp(createdAtRaw);
     res.status(200).json({ comments: outComments, post: { caption, imageUrl, ownerUsername: postOwnerUsername, ownerAvatarUrl: postOwnerAvatar, createdAt } });
   } catch (e: any) {
-    res.status(500).json({ error: 'Unhandled error', details: e?.message ?? String(e) });
+    res.status(500).json({ error: 'Internal server error' });
   }
 }

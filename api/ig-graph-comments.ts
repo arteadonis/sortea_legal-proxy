@@ -67,9 +67,9 @@ interface OutputComment {
 }
 
 function cors(res: VercelResponse): void {
-  res.setHeader('Access-Control-Allow-Origin', '*');
+  res.setHeader('Access-Control-Allow-Origin', process.env.ALLOWED_ORIGIN || '*');
   res.setHeader('Access-Control-Allow-Methods', 'GET, OPTIONS');
-  res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization, X-API-Key');
 }
 
 /**
@@ -284,6 +284,6 @@ export default async function handler(req: VercelRequest, res: VercelResponse): 
       });
       return;
     }
-    res.status(500).json({ error: 'Unhandled error', details: message });
+    res.status(500).json({ error: 'Internal server error' });
   }
 }
