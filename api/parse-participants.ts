@@ -25,24 +25,21 @@ function extractFirstJson(text: string): string | null {
 
 /** Split by detected separator and clean each entry. */
 function localFallbackParse(text: string): ParseResult {
-  // Try to detect the most likely separator
   const lines = text.split(/\r?\n/).map((l) => l.trim()).filter(Boolean);
-  let entries: string[];
 
-  if (lines.length >= 2) {
-    // Multi-line input — one participant per line
-    entries = lines;
-  } else {
-    // Single line or few lines — try comma, semicolon, tab
-    const joined = lines.join(' ');
-    if (joined.includes('\t')) {
-      entries = joined.split('\t').map((s) => s.trim()).filter(Boolean);
-    } else if (joined.includes(',')) {
-      entries = joined.split(',').map((s) => s.trim()).filter(Boolean);
-    } else if (joined.includes(';')) {
-      entries = joined.split(';').map((s) => s.trim()).filter(Boolean);
+  // Phase 1: Split each line further by commas, semicolons, or tabs.
+  // This handles mixed formats like "@user1, user2\nuser3\nuser4".
+  const entries: string[] = [];
+  for (const line of lines) {
+    // Detect inline separators: comma, semicolon, or tab
+    if (line.includes('\t')) {
+      entries.push(...line.split('\t').map((s) => s.trim()).filter(Boolean));
+    } else if (line.includes(',')) {
+      entries.push(...line.split(',').map((s) => s.trim()).filter(Boolean));
+    } else if (line.includes(';')) {
+      entries.push(...line.split(';').map((s) => s.trim()).filter(Boolean));
     } else {
-      entries = joined.split(/\s{2,}/).map((s) => s.trim()).filter(Boolean);
+      entries.push(line);
     }
   }
 
@@ -101,14 +98,15 @@ export default async function handler(req: VercelRequest, res: VercelResponse): 
       'You are an assistant that parses participant lists for giveaways/raffles. You receive raw text that users paste, which may contain participant names/usernames in various formats. Return ONLY valid JSON.';
 
     const userPrompt = `
-Analyze the following text and extract participant names/usernames. The text may use ANY format:
+Analyze the following text and extract participant names/usernames. The text may use ANY format, including MIXED formats:
 - One name per line
-- Comma-separated
+- Comma-separated (on one line or across lines)
 - Tab-separated
 - Semicolon-separated
 - Numbered lists (1. name, 2. name)
 - With or without @ prefix
 - Names can be single words (usernames) or full names (First Last)
+- MIXED: some names comma-separated on the same line AND other names on separate lines
 - May have extra whitespace, quotes, or noise
 
 Rules:
